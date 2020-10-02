@@ -10,6 +10,8 @@ const session = require('express-session')
 const flash = require('express-flash')
 const mongoDBStore = require('connect-mongo')(session)
 const passport = require('passport')
+const Emitter = require('events') 
+
 
 // Database Connection
 const url = 'mongodb://localhost/pizza'
@@ -36,6 +38,12 @@ let mongoStore = new mongoDBStore({
 
 })
 
+
+// Event Emitter
+const eventEmitter = new Emitter()
+app.set('eventEmitter', eventEmitter)  //bind with app to let anything access it
+
+
 // Session config (uses cookies - encrypted)
 app.use(session({
     secret: process.env.COOKIE_SECRET,
@@ -47,6 +55,7 @@ app.use(session({
 
 // Passport config should be after session config 
 const passportInit = require('./app/config/passport')
+const { Socket } = require('dgram')
 passportInit(passport)
 app.use(passport.initialize())
 app.use(passport.session())
@@ -74,6 +83,23 @@ app.set('view engine', 'ejs')
 require('./routes/web')(app)
 
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Listening on port ${PORT}`)
+})
+
+// SOCKET
+
+const io = require('socket.io')(server)
+io.on('connection', (socket) =>{
+     socket.on('join', (orderId)=>{
+        socket.join(orderId) // private rooms
+     })
+
+})
+
+eventEmitter.on('orderUpdated', (data)=>{
+    io.to(`order_${data.id}`).emit('orderUpdated', data)
+})
+eventEmitter.on('orderPlaced', (data)=>{
+    io.to(`adminRoom`).emit('orderPlaced', data)
 })
